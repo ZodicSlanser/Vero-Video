@@ -14,7 +14,7 @@ class DatabaseSeeder extends Seeder
      */
     public function run()
     {
-        $video = Video::create(['path' => 'videos/video.mp4']);
+        $video = Video::create(['path' => 'videos/video.mp4','show_answers' => 1]);
         $user = User::create(['name' => 'John Doe', 'info' => 'Sample user info']);
 
         QuizQuestion::create([
