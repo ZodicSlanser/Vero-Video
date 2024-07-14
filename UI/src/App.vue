@@ -5,7 +5,7 @@
 </template>
 
 <script>
-import VideoQuiz from './components/VideoQuiz.vue';
+import VideoQuiz from './components/MainContainer.vue';
 
 
 export default {

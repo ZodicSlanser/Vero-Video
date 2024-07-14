@@ -9,7 +9,11 @@ class Video extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['path'];
+    protected $fillable = ['path','show_answers'];
+    protected $casts = [
+        'path' => 'string',
+        'show_answers' => 'boolean'
+    ];
 
     public function quizQuestions()
     {

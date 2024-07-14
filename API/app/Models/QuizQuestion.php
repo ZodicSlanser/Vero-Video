@@ -9,7 +9,7 @@ class QuizQuestion extends Model
 {
     use HasFactory;
 
-    protected $fillable = ['video_id', 'seconds', 'question', 'options', 'correct_answer', 'type'];
+    protected $fillable = ['video_id', 'seconds', 'question', 'options', 'correct_answer'];
 
     protected $casts = [
         'options' => 'array'
