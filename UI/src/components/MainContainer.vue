@@ -25,11 +25,13 @@
             <span class="radio-checkmark"></span>
           </label>
         </div>
-        <button class="btn submit-btn" type="submit">Submit</button>
+        <button v-if="!isSubmitted" class="btn submit-btn" type="submit">Submit</button>
+        <button v-else @click="closeOverlay" class="btn done-btn" type="button">Done</button>
       </form>
     </div>
   </div>
 </template>
+
 
 <script>
 import axios from "axios";
@@ -47,6 +49,7 @@ export default {
       userAnswer: null,
       correctAnswer: null,
       renderVideo: false,
+      isSubmitted: false,
     };
   },
   mounted() {
@@ -77,6 +80,7 @@ export default {
         this.currentQuestion = this.quizData[this.currentQuizIndex];
         this.correctAnswer = this.currentQuestion.correct_answer;
         this.userAnswer = null;
+        this.isSubmitted = false;
       }
     },
     async submitAnswer() {
@@ -92,13 +96,16 @@ export default {
           selected_option: answer,
           correct: answer === question.correct_answer,
         });
-        this.showQuizOverlay = false;
-        this.currentQuizIndex++;
-        this.selectedOption = null;
-        this.$refs.videoPlayer.play();
+        this.isSubmitted = true;
       } catch (error) {
         console.error("Error saving answer:", error);
       }
+    },
+    closeOverlay() {
+      this.showQuizOverlay = false;
+      this.currentQuizIndex++;
+      this.selectedOption = null;
+      this.$refs.videoPlayer.play();
     },
     getOptionClass(index) {
       if (this.userAnswer === null) {
@@ -152,7 +159,7 @@ video {
   padding-left: 20px;
 }
 
-.submit-btn {
+.submit-btn, .done-btn {
   margin-top: 10px;
   width: 100%;
   background-color: #007bff;
@@ -163,7 +170,11 @@ video {
   cursor: pointer;
 }
 
-.submit-btn:hover {
+.done-btn {
+  background-color: #28a745;
+}
+
+.submit-btn:hover, .done-btn:hover {
   background-color: #0056b3;
 }
 
@@ -187,7 +198,6 @@ video {
   }
   .quiz-overlay {
     width: 50%;
-
     padding: 15px;
   }
 
@@ -196,7 +206,7 @@ video {
     padding: 6px;
   }
 
-  .submit-btn {
+  .submit-btn, .done-btn {
     padding: 8px;
   }
 }
@@ -206,7 +216,6 @@ video {
   }
   .quiz-overlay {
     width: 50%;
-
     padding: 10px;
   }
 
@@ -215,7 +224,7 @@ video {
     padding: 5px;
   }
 
-  .submit-btn {
+  .submit-btn, .done-btn {
     padding: 6px;
   }
 }
@@ -230,7 +239,7 @@ video {
     padding: 2px;
   }
 
-  .submit-btn {
+  .submit-btn, .done-btn {
     padding: 4px;
   }
 }
