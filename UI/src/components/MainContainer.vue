@@ -33,6 +33,7 @@
 </template>
 
 
+
 <script>
 import axios from "axios";
 import serverURL from "@/constants";
@@ -50,10 +51,12 @@ export default {
       correctAnswer: null,
       renderVideo: false,
       isSubmitted: false,
+      answeredQuestions: [], // List of answered question IDs
     };
   },
   mounted() {
     this.loadVideoData();
+    this.loadUserAnswers();
   },
   methods: {
     async loadVideoData() {
@@ -69,18 +72,33 @@ export default {
         console.error("Error loading video data:", error);
       }
     },
+    async loadUserAnswers() {
+      try {
+        await axios.get(serverURL + "/api/user-answers?user_id=1").then((response) => {
+          this.answeredQuestions = response.data.map(answer => answer.quiz_question_id);
+        });
+      } catch (error) {
+        console.error("Error loading user answers:", error);
+      }
+    },
     checkQuiz() {
       const videoPlayer = this.$refs.videoPlayer;
-      if (
-        this.currentQuizIndex < this.quizData.length &&
-        videoPlayer.currentTime >= this.quizData[this.currentQuizIndex].seconds
-      ) {
-        videoPlayer.pause();
-        this.showQuizOverlay = true;
-        this.currentQuestion = this.quizData[this.currentQuizIndex];
-        this.correctAnswer = this.currentQuestion.correct_answer;
-        this.userAnswer = null;
-        this.isSubmitted = false;
+      while (this.currentQuizIndex < this.quizData.length) {
+        const currentQuestion = this.quizData[this.currentQuizIndex];
+        if (this.answeredQuestions.includes(currentQuestion.id)) {
+          this.currentQuizIndex++;
+          continue;
+        }
+        if (videoPlayer.currentTime >= currentQuestion.seconds) {
+          videoPlayer.pause();
+          this.showQuizOverlay = true;
+          this.currentQuestion = currentQuestion;
+          this.correctAnswer = currentQuestion.correct_answer;
+          this.userAnswer = null;
+          this.isSubmitted = false;
+          break;
+        }
+        break;
       }
     },
     async submitAnswer() {
@@ -97,6 +115,7 @@ export default {
           correct: answer === question.correct_answer,
         });
         this.isSubmitted = true;
+        this.answeredQuestions.push(question.id); // Mark the question as answered
       } catch (error) {
         console.error("Error saving answer:", error);
       }
@@ -171,7 +190,8 @@ video {
 }
 
 .done-btn {
-  background-color: #28a745;
+  background-color: green;
+
 }
 
 .submit-btn:hover, .done-btn:hover {
