@@ -5,12 +5,34 @@
       ref="videoPlayer"
       width="640"
       height="360"
-      controls
       @timeupdate="checkQuiz"
+      @loadedmetadata="initializeSeekbar"
     >
       <source :src="videoPath" type="video/mp4" />
       Your browser does not support the video tag.
     </video>
+    <div class="controls">
+      <button @click="playPause" class="btn play-pause-btn">
+        <font-awesome-icon :icon="isPlaying ? ['fas', 'pause'] : ['fas', 'play']" />
+      </button>
+      
+      <input
+        type="range"
+        min="0"
+        :max="videoDuration"
+        v-model="seekbarValue"
+        @input="onSeekbarInput"
+        @mousedown="startSeek"
+        @mouseup="endSeek"
+        class="custom-seekbar"
+      />
+      <button @click="toggleMute" class=" mute-btn">
+        <font-awesome-icon :icon="isMuted ? ['fas', 'volume-mute'] : ['fas', 'volume-up']" />
+      </button>
+      <button @click="toggleFullscreen" class=" fullscreen-btn">
+        <font-awesome-icon icon="expand" />
+      </button>
+    </div>
     <div v-if="showQuizOverlay" class="quiz-overlay">
       <p>{{ currentQuestion.question }}</p>
       <form @submit.prevent="submitAnswer">
@@ -51,7 +73,14 @@ export default {
       correctAnswer: null,
       renderVideo: false,
       isSubmitted: false,
-      answeredQuestions: [], // List of answered question IDs
+      answeredQuestions: [],  // List of answered question IDs
+      videoDuration: 0,
+      seekbarValue: 0,
+      isPlaying: false,  // Track play/pause state
+      bufferTime: 10,  // Buffer time to adjust video play position
+      isMuted: false,
+      seeking: false,
+      
     };
   },
   mounted() {
@@ -82,90 +111,222 @@ export default {
       }
     },
     checkQuiz() {
-      const videoPlayer = this.$refs.videoPlayer;
-      while (this.currentQuizIndex < this.quizData.length) {
-        const currentQuestion = this.quizData[this.currentQuizIndex];
-        if (this.answeredQuestions.includes(currentQuestion.id)) {
-          this.currentQuizIndex++;
-          continue;
-        }
-        if (videoPlayer.currentTime >= currentQuestion.seconds) {
-          videoPlayer.pause();
-          this.showQuizOverlay = true;
-          this.currentQuestion = currentQuestion;
-          this.correctAnswer = currentQuestion.correct_answer;
-          this.userAnswer = null;
-          this.isSubmitted = false;
-          break;
-        }
-        break;
-      }
-    },
-    async submitAnswer() {
-      const question = this.currentQuestion;
-      const answer = this.selectedOption;
-      this.userAnswer = answer;
-      this.correctAnswer = question.correct_answer;
+    const videoPlayer = this.$refs.videoPlayer;
 
-      try {
-        await axios.post(serverURL + "/api/user-answers", {
-          user_id: 1, // Example user ID
-          quiz_question_id: question.id,
-          selected_option: answer,
-          correct: answer === question.correct_answer,
-        });
-        this.isSubmitted = true;
-        this.answeredQuestions.push(question.id); // Mark the question as answered
-      } catch (error) {
-        console.error("Error saving answer:", error);
-      }
-    },
-    closeOverlay() {
-      this.showQuizOverlay = false;
-      this.currentQuizIndex++;
-      this.selectedOption = null;
-      this.$refs.videoPlayer.play();
-    },
-    getOptionClass(index) {
-      if (this.userAnswer === null) {
-        return { "selected-option": this.selectedOption === index };
-      }
-      if (index === this.correctAnswer) {
-        return "correct-option";
-      }
-      if (index === this.userAnswer) {
-        return "incorrect-option";
-      }
-      return "";
-    },
+    if (this.currentQuizIndex >= this.quizData.length) return;
+
+    const currentQuestion = this.quizData[this.currentQuizIndex];
+
+    // Check if the quiz question is due for display
+    if (videoPlayer.currentTime >= currentQuestion.seconds && !this.answeredQuestions.includes(currentQuestion.id)) {
+      videoPlayer.pause();
+      this.isPlaying = false;
+      this.showQuizOverlay = true;
+      this.currentQuestion = currentQuestion;
+      this.correctAnswer = currentQuestion.correct_answer;
+      this.userAnswer = null;
+      this.isSubmitted = false;
+    }
   },
+  async submitAnswer() {
+    const question = this.currentQuestion;
+    const answer = this.selectedOption;
+    this.userAnswer = answer;
+    this.correctAnswer = question.correct_answer;
+
+    try {
+      await axios.post(`${serverURL}/api/user-answers`, {
+        user_id: 2, // Example user ID
+        quiz_question_id: question.id,
+        selected_option: answer,
+        correct: answer === question.correct_answer,
+      });
+      this.isSubmitted = true;
+      this.answeredQuestions.push(question.id); // Mark the question as answered
+    } catch (error) {
+      console.error("Error saving answer:", error);
+    }
+  },
+  closeOverlay() {
+    this.showQuizOverlay = false;
+    this.currentQuizIndex++;
+    this.selectedOption = null;
+    this.$refs.videoPlayer.play();
+    this.isPlaying = true;
+  },
+  getOptionClass(index) {
+    if (this.userAnswer === null) {
+      return { "selected-option": this.selectedOption === index };
+    }
+    if (index === this.correctAnswer) {
+      return "correct-option";
+    }
+    if (index === this.userAnswer) {
+      return "incorrect-option";
+    }
+    return "";
+  },
+
+  onSeekbarInput(event) {
+  const videoPlayer = this.$refs.videoPlayer;
+  const newTime = parseFloat(event.target.value);
+  console.log(`Seekbar input: ${newTime}`);
+  videoPlayer.currentTime = newTime;
+  this.seekbarValue = newTime;
+  this.checkQuiz();
+},
+
+  startSeek() {
+    this.seeking = true;
+  },
+
+  endSeek() {
+    this.seeking = false;
+    this.checkQuiz(); // Check quiz conditions after seeking
+  },
+
+  initializeSeekbar() {
+    const videoPlayer = this.$refs.videoPlayer;
+
+    // Initialize seekbar value and video duration
+    this.videoDuration = videoPlayer.duration;
+    this.seekbarValue = videoPlayer.currentTime;
+
+    // Listen for time updates
+    videoPlayer.addEventListener('timeupdate', () => {
+      if (!this.seeking) {
+        this.seekbarValue = videoPlayer.currentTime;
+      }
+    });
+  },
+
+  playPause() {
+    const videoPlayer = this.$refs.videoPlayer;
+    if (this.isPlaying) {
+      videoPlayer.pause();
+    } else {
+      videoPlayer.play();
+    }
+    this.isPlaying = !this.isPlaying;
+  },
+  toggleMute() {
+    const videoPlayer = this.$refs.videoPlayer;
+    videoPlayer.muted = !videoPlayer.muted;
+    this.isMuted = videoPlayer.muted;
+  },
+  toggleFullscreen() {
+    const videoPlayer = this.$refs.videoPlayer;
+    if (videoPlayer.requestFullscreen) {
+      videoPlayer.requestFullscreen();
+    } else if (videoPlayer.mozRequestFullScreen) { /* Firefox */
+      videoPlayer.mozRequestFullScreen();
+    } else if (videoPlayer.webkitRequestFullscreen) { /* Chrome, Safari and Opera */
+      videoPlayer.webkitRequestFullscreen();
+    } else if (videoPlayer.msRequestFullscreen) { /* IE/Edge */
+      videoPlayer.msRequestFullscreen();
+    }
+  }
+},
 };
 </script>
 
 <style scoped>
+.container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  background-color: #1e1e1e;
+  color: white;
+  padding: 20px;
+  border-radius: 10px;
+}
+
+video {
+  border-radius: 10px;
+}
+
+.controls {
+  display: flex;
+  align-items: center;
+  gap: 10px; /* Increased gap between buttons */
+  margin-top: 10px;
+  width: 100%; /* Full width to accommodate the seekbar */
+}
+
+.btn {
+  background-color: #ff3366;
+  color: white;
+  border: none;
+  padding: 10px 15px; /* Adjusted padding */
+  cursor: pointer;
+  border-radius: 50%;
+}
+
+.mute-btn,
+.fullscreen-btn {
+  background-color: #1e1e1e;
+
+  color: white;
+  border: none;
+  padding: 8px; /* Adjusted padding */
+  cursor: pointer;
+  border-radius: 15px;
+}
+ .play-pause-btni {
+  font-size: 20px; /* Larger icon size */
+}
+
+.mute-btn i {
+  font-size: 20px; /* Larger icon size */
+}
+
+.fullscreen-btn i {
+  font-size: 20px; /* Larger icon size */
+}
+
+.custom-seekbar {
+  -webkit-appearance: none;
+  width: 100%; /* Full width of the container */
+  height: 8px; /* Increased height for better visibility */
+  background: #ff3366; /* Changed seekbar progress color to pink */
+  border-radius: 5px;
+  outline: none;
+  margin: 0;
+}
+
+.custom-seekbar::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: 12px; /* Smaller thumb */
+  height: 12px; /* Smaller thumb */
+  background: white;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
+.custom-seekbar::-moz-range-thumb {
+  width: 12px; /* Smaller thumb */
+  height: 12px; /* Smaller thumb */
+  background: white;
+  border-radius: 50%;
+  cursor: pointer;
+}
+
 .quiz-overlay {
   position: absolute;
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background: rgba(255, 255, 255, 0.906);
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
   padding: 20px;
   border: 1px solid #ccc;
   box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
   z-index: 1000;
-  width: 50%;
+  
   text-align: center;
   border-radius: 15px;
 }
-.container {
-  width: 70%;
-}
 
-video {
-  width: 100%;
-  height: auto;
-  display: block;
-}
 
 .quiz-option {
   margin: 5px 0;
@@ -178,89 +339,24 @@ video {
   padding-left: 20px;
 }
 
-.submit-btn, .done-btn {
-  margin-top: 10px;
-  width: 100%;
-  background-color: #007bff;
-  color: white;
-  border: none;
-  border-radius: 20px;
-  padding: 10px;
-  cursor: pointer;
-}
-
-.done-btn {
-  background-color: green;
-
-}
-
-.submit-btn:hover, .done-btn:hover {
-  background-color: #0056b3;
-}
 
 .selected-option {
-  background-color: #f0f0f0ab;
+  background-color: #ff3366;
 }
 
 .correct-option {
   background-color: #28a745;
-  color: white;
 }
 
 .incorrect-option {
   background-color: #dc3545;
-  color: white;
 }
 
-@media (max-width: 768px) {
-  .container {
-    width: 80%;
-  }
-  .quiz-overlay {
-    width: 50%;
-    padding: 15px;
-  }
-
-  .quiz-option {
-    margin: 3px 0;
-    padding: 6px;
-  }
-
-  .submit-btn, .done-btn {
-    padding: 8px;
-  }
+.submit-btn, .done-btn {
+  background-color: #ff3366;
 }
-@media (max-width: 480px) {
-  .container {
-    width: 90%;
-  }
-  .quiz-overlay {
-    width: 50%;
-    padding: 10px;
-  }
 
-  .quiz-option {
-    margin: 2px 0;
-    padding: 5px;
-  }
-
-  .submit-btn, .done-btn {
-    padding: 6px;
-  }
-}
-@media (max-width: 350px) {
-  .quiz-overlay {
-    width: 50%;
-    padding: 5px;
-  }
-
-  .quiz-option {
-    margin: 1px 0;
-    padding: 2px;
-  }
-
-  .submit-btn, .done-btn {
-    padding: 4px;
-  }
+.submit-btn:hover, .done-btn:hover {
+  background-color: #e02f5f;
 }
 </style>
