@@ -5,7 +5,7 @@
       ref="videoPlayer"
       width="640"
       height="360"
-      @timeupdate="checkQuiz"
+      @timeupdate="handleTimeUpdate"
       @loadedmetadata="initializeSeekbar"
     >
       <source :src="videoPath" type="video/mp4" />
@@ -171,7 +171,9 @@ export default {
   const videoPlayer = this.$refs.videoPlayer;
   const newTime = parseFloat(event.target.value);
   console.log(`Seekbar input: ${newTime}`);
+  console.log(`current time (before update): ${videoPlayer.currentTime}`);
   videoPlayer.currentTime = newTime;
+  console.log(`current time (after update): ${videoPlayer.currentTime}`);
   this.seekbarValue = newTime;
   this.checkQuiz();
 },
@@ -225,7 +227,18 @@ export default {
     } else if (videoPlayer.msRequestFullscreen) { /* IE/Edge */
       videoPlayer.msRequestFullscreen();
     }
-  }
+  },
+  updateSeekbar() {
+    const videoPlayer = this.$refs.videoPlayer;
+    if (!this.seeking) {
+      this.seekbarValue = videoPlayer.currentTime;
+    }
+
+  },
+  handleTimeUpdate(){
+  this.updateSeekbar();
+  this.checkQuiz();
+}
 },
 };
 </script>
