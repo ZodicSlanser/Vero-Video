@@ -1,4 +1,18 @@
 import { createApp } from 'vue'
 import App from './App.vue'
+import { library } from '@fortawesome/fontawesome-svg-core'
+import { FontAwesomeIcon } from '@fortawesome/vue-fontawesome'
 
-createApp(App).mount('#app')
+// Import the Font Awesome icons you will use
+import { faPlay, faPause, faVolumeMute, faVolumeUp, faExpand, faCircle } from '@fortawesome/free-solid-svg-icons'
+
+// Add the icons to the library
+library.add(faPlay, faPause, faVolumeMute, faVolumeUp, faExpand,faCircle)
+
+// Create and mount the Vue app
+const app = createApp(App)
+app.component('font-awesome-icon', FontAwesomeIcon)
+app.mount('#app')
+
+
+
