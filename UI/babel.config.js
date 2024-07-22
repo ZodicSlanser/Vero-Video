@@ -1,7 +1,8 @@
-const { defineConfig } = require('@vue/cli-service')
 
 module.exports = {
   presets: [
-    '@vue/cli-plugin-babel/preset'
+    ['@vue/cli-plugin-babel/preset', {
+      targets: "> 0.25%, not dead"
+    }]
   ]
-}
+};
