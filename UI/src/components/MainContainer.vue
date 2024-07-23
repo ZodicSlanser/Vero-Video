@@ -136,7 +136,7 @@ export default {
 
     try {
       await axios.post(`${serverURL}/api/user-answers`, {
-        user_id: 2, // Example user ID
+        user_id: 1, // Example user ID
         quiz_question_id: question.id,
         selected_option: answer,
         correct: answer === question.correct_answer,
