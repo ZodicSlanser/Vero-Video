@@ -35,3 +35,7 @@
     XSendFilePath /public/videos/
 </IfModule>
 
+<FilesMatch "\.(mp4|webm|ogg)$">
+    Header set Accept-Ranges bytes
+</FilesMatch>
+

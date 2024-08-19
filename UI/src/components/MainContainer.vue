@@ -1,21 +1,30 @@
 <template>
-  <div class="container">
+  <div class="video-container" ref="videoContainer">
     <video
       v-if="renderVideo"
       ref="videoPlayer"
-      width="640"
-      height="360"
+      width="100%"
+      height="100%"
       @timeupdate="handleTimeUpdate"
-      @loadedmetadata="initializeSeekbar"
+      @loadedmetadata="onVideoLoaded"
     >
       <source :src="videoPath" type="video/mp4" />
+      <track
+        v-for="(subtitle, index) in subtitles"
+        :key="index"
+        :label="subtitle.label"
+        kind="subtitles"
+        :srclang="subtitle.language"
+        :src="subtitle.path"
+        :default="index === selectedSubtitleIndex"
+      />
       Your browser does not support the video tag.
     </video>
     <div class="controls">
       <button @click="playPause" class="btn play-pause-btn">
         <font-awesome-icon :icon="isPlaying ? ['fas', 'pause'] : ['fas', 'play']" />
       </button>
-      
+
       <input
         type="range"
         min="0"
@@ -26,35 +35,43 @@
         @mouseup="endSeek"
         class="custom-seekbar"
       />
-      <button @click="toggleMute" class=" mute-btn">
-        <font-awesome-icon :icon="isMuted ? ['fas', 'volume-mute'] : ['fas', 'volume-up']" />
+      <button @click="toggleMute" class="mute-btn">
+        <font-awesome-icon
+          :icon="isMuted ? ['fas', 'volume-mute'] : ['fas', 'volume-up']"
+        />
       </button>
-      <button @click="toggleFullscreen" class=" fullscreen-btn">
+      <button @click="toggleFullscreen" class="fullscreen-btn">
         <font-awesome-icon icon="expand" />
+      </button>
+      <button @click="toggleSubtitles" class="subtitles-btn">
+        <font-awesome-icon
+          :icon="subtitlesEnabled ? ['fas', 'closed-captioning'] : ['fas', 'closed-captioning']"
+        />
       </button>
     </div>
     <div v-if="showQuizOverlay" class="quiz-overlay">
-      <p>{{ currentQuestion.question }}</p>
-      <form @submit.prevent="submitAnswer">
-        <div
-          v-for="(option, index) in currentQuestion.options"
-          :key="index"
-          :class="getOptionClass(index)"
-          class="quiz-option"
-        >
-          <label>
-            <input type="radio" :value="index" v-model="selectedOption" /> {{ option }}
-            <span class="radio-checkmark"></span>
-          </label>
-        </div>
-        <button v-if="!isSubmitted" class="btn submit-btn" type="submit">Submit</button>
-        <button v-else @click="closeOverlay" class="btn done-btn" type="button">Done</button>
-      </form>
+      <div class="quiz-content">
+        <p>{{ currentQuestion.question }}</p>
+        <form @submit.prevent="submitAnswer">
+          <div class="quiz-options">
+            <div
+              v-for="(option, index) in currentQuestion.options"
+              :key="index"
+              :class="['quiz-option', getOptionClass(index)]"
+              @click="selectOption(index)"
+            >
+              <span>{{ option }}</span>
+            </div>
+          </div>
+          <button v-if="!isSubmitted" class="btn submit-btn" type="submit">Submit</button>
+          <button v-else @click="closeOverlay" class="btn done-btn" type="button">
+            Done
+          </button>
+        </form>
+      </div>
     </div>
   </div>
 </template>
-
-
 
 <script>
 import axios from "axios";
@@ -64,6 +81,7 @@ export default {
   data() {
     return {
       videoPath: "",
+      subtitlesPath: "",
       quizData: [],
       currentQuizIndex: 0,
       showQuizOverlay: false,
@@ -73,255 +91,342 @@ export default {
       correctAnswer: null,
       renderVideo: false,
       isSubmitted: false,
-      answeredQuestions: [],  // List of answered question IDs
+      answeredQuestions: [],
       videoDuration: 0,
       seekbarValue: 0,
-      isPlaying: false,  // Track play/pause state
-      bufferTime: 10,  // Buffer time to adjust video play position
+      isPlaying: false,
+      bufferTime: 10,
       isMuted: false,
       seeking: false,
-      
+      subtitlesEnabled: true, // Track subtitle state
+      subtitles: [
+        {
+          label: "English",
+          language: "en",
+          path: "/subtitles/sample-en.vtt",
+        },
+        {
+          label: "Spanish",
+          language: "es",
+          path: "/subtitles/sample-es.vtt",
+        },
+      ],
+      selectedSubtitleIndex: 0,
     };
   },
   mounted() {
     this.loadVideoData();
     this.loadUserAnswers();
+    this.$nextTick(() => {
+    console.log('Video Player Ref:', this.$refs.videoPlayer);
+  });
   },
   methods: {
     async loadVideoData() {
       try {
-        await axios.get(serverURL + "/api/videos/1").then((response) => {
-          let pathText = response.data.path;
-          this.videoPath = serverURL + "/" + pathText;
-          this.renderVideo = true;
-          console.log("Video data:", response.data);
-          this.quizData = response.data.quiz_questions;
-        });
-      } catch (error) {
-        console.error("Error loading video data:", error);
-      }
-    },
+        const response = await axios.get(`${serverURL}/api/videos/1`);
+        this.videoPath = `${serverURL}/api/stream/${response.data.path}`;
+        console.log(response.data)
+
+        // Check if the response has a subtitle path
+        if (response.data.subtitles_path) {
+          this.subtitlesPath = serverURL + "/" + response.data.subtitles_path;
+        }
+
+        this.renderVideo = true;
+        this.quizData = response.data.quiz_questions;
+        this.$nextTick(() => {
+        const videoPlayer = this.$refs.videoPlayer;
+        if (videoPlayer) {
+          console.log('Video Player Ref:', videoPlayer);
+        } else {
+          console.log('Video Player Ref is undefined');
+        }
+      });
+    } catch (error) {
+      console.error("Error loading video data:", error);
+    }
+  },
     async loadUserAnswers() {
       try {
-        await axios.get(serverURL + "/api/user-answers?user_id=1").then((response) => {
-          this.answeredQuestions = response.data.map(answer => answer.quiz_question_id);
-        });
+        const response = await axios.get(serverURL + "/api/user-answers?user_id=1");
+        this.answeredQuestions = response.data.map((answer) => answer.quiz_question_id);
       } catch (error) {
         console.error("Error loading user answers:", error);
       }
     },
-    checkQuiz() {
-    const videoPlayer = this.$refs.videoPlayer;
+    onVideoLoaded() {
+  this.initializeSeekbar();
+  this.initializeSubtitles();
 
-    if (this.currentQuizIndex >= this.quizData.length) return;
-
-    const currentQuestion = this.quizData[this.currentQuizIndex];
-
-    // Check if the quiz question is due for display
-    if (videoPlayer.currentTime >= currentQuestion.seconds && !this.answeredQuestions.includes(currentQuestion.id)) {
-      videoPlayer.pause();
-      this.isPlaying = false;
-      this.showQuizOverlay = true;
-      this.currentQuestion = currentQuestion;
-      this.correctAnswer = currentQuestion.correct_answer;
-      this.userAnswer = null;
-      this.isSubmitted = false;
-    }
-  },
-  async submitAnswer() {
-    const question = this.currentQuestion;
-    const answer = this.selectedOption;
-    this.userAnswer = answer;
-    this.correctAnswer = question.correct_answer;
-
-    try {
-      await axios.post(`${serverURL}/api/user-answers`, {
-        user_id: 1, // Example user ID
-        quiz_question_id: question.id,
-        selected_option: answer,
-        correct: answer === question.correct_answer,
-      });
-      this.isSubmitted = true;
-      this.answeredQuestions.push(question.id); // Mark the question as answered
-    } catch (error) {
-      console.error("Error saving answer:", error);
-    }
-  },
-  closeOverlay() {
-    this.showQuizOverlay = false;
-    this.currentQuizIndex++;
-    this.selectedOption = null;
-    this.$refs.videoPlayer.play();
-    this.isPlaying = true;
-  },
-  getOptionClass(index) {
-    if (this.userAnswer === null) {
-      return { "selected-option": this.selectedOption === index };
-    }
-    if (index === this.correctAnswer) {
-      return "correct-option";
-    }
-    if (index === this.userAnswer) {
-      return "incorrect-option";
-    }
-    return "";
-  },
-
-  onSeekbarInput(event) {
   const videoPlayer = this.$refs.videoPlayer;
-  const newTime = parseFloat(event.target.value);
-  console.log(`Seekbar input: ${newTime}`);
-  console.log(`current time (before update): ${videoPlayer.currentTime}`);
-  videoPlayer.currentTime = newTime;
-  console.log(`current time (after update): ${videoPlayer.currentTime}`);
-  this.seekbarValue = newTime;
-  this.checkQuiz();
+  if (videoPlayer) {
+    console.log("Video loaded with duration:", videoPlayer.duration);
+  }
 },
-
-  startSeek() {
-    this.seeking = true;
-  },
-
-  endSeek() {
-    this.seeking = false;
-    this.checkQuiz(); // Check quiz conditions after seeking
-  },
-
-  initializeSeekbar() {
-    const videoPlayer = this.$refs.videoPlayer;
-
-    // Initialize seekbar value and video duration
+initializeSeekbar() {
+  const videoPlayer = this.$refs.videoPlayer;
+  if (videoPlayer) {
     this.videoDuration = videoPlayer.duration;
     this.seekbarValue = videoPlayer.currentTime;
 
-    // Listen for time updates
-    videoPlayer.addEventListener('timeupdate', () => {
-      if (!this.seeking) {
-        this.seekbarValue = videoPlayer.currentTime;
+    videoPlayer.addEventListener("timeupdate", () => {
+      this.checkQuiz();
+    })
+  }
+},  
+    initializeSubtitles() {
+      const videoPlayer = this.$refs.videoPlayer;
+      if (videoPlayer) {
+        const tracks = videoPlayer.textTracks;
+        for (let i = 0; i < tracks.length; i++) {
+          tracks[i].mode = i === this.selectedSubtitleIndex ? "showing" : "hidden";
+        }
       }
-    });
-  },
+    },
+    selectOption(index) {
+      if (!this.isSubmitted) {
+        this.selectedOption = index;
+      }
+    },
+    toggleSubtitles() {
+      const videoPlayer = this.$refs.videoPlayer;
+      if (videoPlayer) {
+        this.selectedSubtitleIndex =
+          (this.selectedSubtitleIndex + 1) % this.subtitles.length;
 
-  playPause() {
-    const videoPlayer = this.$refs.videoPlayer;
-    if (this.isPlaying) {
-      videoPlayer.pause();
-    } else {
-      videoPlayer.play();
-    }
-    this.isPlaying = !this.isPlaying;
-  },
-  toggleMute() {
-    const videoPlayer = this.$refs.videoPlayer;
-    videoPlayer.muted = !videoPlayer.muted;
-    this.isMuted = videoPlayer.muted;
-  },
-  toggleFullscreen() {
-    const videoPlayer = this.$refs.videoPlayer;
-    if (videoPlayer.requestFullscreen) {
-      videoPlayer.requestFullscreen();
-    } else if (videoPlayer.mozRequestFullScreen) { /* Firefox */
-      videoPlayer.mozRequestFullScreen();
-    } else if (videoPlayer.webkitRequestFullscreen) { /* Chrome, Safari and Opera */
-      videoPlayer.webkitRequestFullscreen();
-    } else if (videoPlayer.msRequestFullscreen) { /* IE/Edge */
-      videoPlayer.msRequestFullscreen();
-    }
-  },
-  updateSeekbar() {
-    const videoPlayer = this.$refs.videoPlayer;
-    if (!this.seeking) {
-      this.seekbarValue = videoPlayer.currentTime;
-    }
+        const tracks = videoPlayer.textTracks;
+        for (let i = 0; i < tracks.length; i++) {
+          tracks[i].mode = i === this.selectedSubtitleIndex ? "showing" : "hidden";
+        }
+      }
+    },
+    toggleFullscreen() {
+      const videoContainer = this.$refs.videoContainer;
+      if (videoContainer.requestFullscreen) {
+        videoContainer.requestFullscreen();
+      } else if (videoContainer.mozRequestFullScreen) {
+        videoContainer.mozRequestFullScreen();
+      } else if (videoContainer.webkitRequestFullscreen) {
+        videoContainer.webkitRequestFullscreen();
+      } else if (videoContainer.msRequestFullscreen) {
+        videoContainer.msRequestFullscreen();
+      }
+    },
+    checkQuiz() {
+      console.log("Checking Quiz");
+      console.log(this.$refs.videoPlayer);
+      const videoPlayer = this.$refs.videoPlayer;
 
-  },
-  handleTimeUpdate(){
-  this.updateSeekbar();
-  this.checkQuiz();
-}
+      console.log("Current time" + videoPlayer.currentTime);
+
+
+      if (this.currentQuizIndex >= this.quizData.length) return;
+
+      const currentQuestion = this.quizData[this.currentQuizIndex];
+      if (
+        videoPlayer.currentTime >= currentQuestion.seconds &&
+        !this.answeredQuestions.includes(currentQuestion.id)
+      ) {
+        videoPlayer.pause();
+        videoPlayer.currentTime = currentQuestion.seconds
+        this.isPlaying = false;
+        this.showQuizOverlay = true;
+        this.currentQuestion = currentQuestion;
+        this.correctAnswer = currentQuestion.correct_answer;
+        this.userAnswer = null;
+        this.isSubmitted = false;
+      }
+    },
+    async submitAnswer() {
+      const question = this.currentQuestion;
+      const answer = this.selectedOption;
+      this.userAnswer = answer;
+      this.correctAnswer = question.correct_answer;
+
+      try {
+        await axios.post(`${serverURL}/api/user-answers`, {
+          user_id: 1,
+          quiz_question_id: question.id,
+          selected_option: answer,
+          correct: answer === question.correct_answer,
+        });
+        this.isSubmitted = true;
+        this.answeredQuestions.push(question.id);
+      } catch (error) {
+        console.error("Error saving answer:", error);
+      }
+    },
+    closeOverlay() {
+      this.showQuizOverlay = false;
+      this.currentQuizIndex++;
+      this.selectedOption = null;
+      this.$refs.videoPlayer.play();
+      this.isPlaying = true;
+    },
+    getOptionClass(index) {
+      if (this.userAnswer === null) {
+        return { "selected-option": this.selectedOption === index };
+      }
+      if (index === this.correctAnswer) {
+        return "correct-option";
+      }
+      if (index === this.userAnswer) {
+        return "incorrect-option";
+      }
+      return "";
+    },
+    onSeekbarInput(event) {
+  const videoPlayer = this.$refs.videoPlayer;
+  if (videoPlayer) {
+    const newTime = parseFloat(event.target.value);
+
+    // Prevent setting the time if it's within a quiz time window
+    const quizTimes = this.quizData.map(q => q.seconds);
+    if (!quizTimes.includes(Math.floor(newTime))) {
+      videoPlayer.currentTime = newTime;
+      this.seekbarValue = newTime;
+    }
+  }
 },
+
+startSeek() {
+  this.seeking = true;
+
+  // Check if the seeking time is within a quiz time window
+  const videoPlayer = this.$refs.videoPlayer;
+  if (videoPlayer) {
+    const seekingTime = videoPlayer.currentTime;
+
+    const quizTimes = this.quizData.map(q => q.seconds);
+    if (quizTimes.includes(Math.floor(seekingTime))) {
+      // Pause the video if it's at a quiz time
+      videoPlayer.pause();
+      this.isPlaying = false;
+
+      // Show the quiz overlay
+      this.checkQuiz();
+
+    }
+  }
+},
+
+endSeek() {
+  this.seeking = false;
+
+  const videoPlayer = this.$refs.videoPlayer;
+  if (videoPlayer) {
+    // Ensure the video doesn't skip past the quiz times
+    const quizTimes = this.quizData.map(q => q.seconds);
+    if (quizTimes.includes(Math.floor(videoPlayer.currentTime))) {
+      // Resume playing if the video is at a quiz time
+      videoPlayer.play();
+      this.isPlaying = true;
+    }
+
+    this.checkQuiz();
+  }
+},
+
+    playPause() {
+      const videoPlayer = this.$refs.videoPlayer;
+      if (videoPlayer.paused) {
+        videoPlayer.play();
+        this.isPlaying = true;
+      } else {
+        videoPlayer.pause();
+        this.isPlaying = false;
+      }
+    },
+    toggleMute() {
+      const videoPlayer = this.$refs.videoPlayer;
+      videoPlayer.muted = !videoPlayer.muted;
+      this.isMuted = videoPlayer.muted;
+    },
+  },
 };
 </script>
 
 <style scoped>
-.container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+.video-container {
+  position: relative;
+  width: 100%;
+  height: auto;
   background-color: #1e1e1e;
-  color: white;
-  padding: 20px;
   border-radius: 10px;
+  overflow: hidden;
 }
 
 video {
+  width: 100%;
+  height: auto;
+  display: block;
   border-radius: 10px;
 }
 
 .controls {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  width: 100%;
   display: flex;
   align-items: center;
-  gap: 10px; /* Increased gap between buttons */
-  margin-top: 10px;
-  width: 100%; /* Full width to accommodate the seekbar */
+  justify-content: center;
+  gap: 10px;
+  background-color: rgba(0, 0, 0, 0.5);
+  padding: 5px;
+  box-sizing: border-box;
 }
 
 .btn {
-  background-color: #ff3366;
+  background-color: transparent;
   color: white;
   border: none;
-  padding: 10px 15px; /* Adjusted padding */
+  padding: 10px;
   cursor: pointer;
   border-radius: 50%;
+  transition: background-color 0.3s ease;
 }
 
-.mute-btn,
-.fullscreen-btn {
-  background-color: #1e1e1e;
-
-  color: white;
-  border: none;
-  padding: 8px; /* Adjusted padding */
-  cursor: pointer;
-  border-radius: 15px;
-}
- .play-pause-btni {
-  font-size: 20px; /* Larger icon size */
-}
-
-.mute-btn i {
-  font-size: 20px; /* Larger icon size */
-}
-
-.fullscreen-btn i {
-  font-size: 20px; /* Larger icon size */
+.btn:hover {
+  background-color: rgba(255, 255, 255, 0.2);
 }
 
 .custom-seekbar {
   -webkit-appearance: none;
-  width: 100%; /* Full width of the container */
-  height: 8px; /* Increased height for better visibility */
-  background: #ff3366; /* Changed seekbar progress color to pink */
+  width: 70%;
+  height: 8px;
+  background: #ff4081;
   border-radius: 5px;
   outline: none;
-  margin: 0;
+  cursor: pointer;
 }
 
 .custom-seekbar::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 12px; /* Smaller thumb */
-  height: 12px; /* Smaller thumb */
-  background: white;
+  width: 15px;
+  height: 15px;
+  background: #fff;
   border-radius: 50%;
   cursor: pointer;
+  transition: background 0.3s ease;
 }
 
 .custom-seekbar::-moz-range-thumb {
-  width: 12px; /* Smaller thumb */
-  height: 12px; /* Smaller thumb */
-  background: white;
+  width: 15px;
+  height: 15px;
+  background: #fff;
   border-radius: 50%;
   cursor: pointer;
+  transition: background 0.3s ease;
+}
+
+.custom-seekbar:hover::-webkit-slider-thumb {
+  background: #ff4081;
+}
+
+.custom-seekbar:hover::-moz-range-thumb {
+  background: #ff4081;
 }
 
 .quiz-overlay {
@@ -329,47 +434,87 @@ video {
   top: 50%;
   left: 50%;
   transform: translate(-50%, -50%);
-  background-color: rgba(0, 0, 0, 0.7);
+  width: 80%;
+  background-color: rgba(0, 0, 0, 0.8);
   color: white;
   padding: 20px;
-  border: 1px solid #ccc;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
-  z-index: 1000;
-  
-  text-align: center;
   border-radius: 15px;
+  z-index: 1000;
+  text-align: center;
+  box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
 }
 
+.quiz-overlay.show {
+  opacity: 1;
+}
+
+.quiz-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+.quiz-options {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  width: 100%;
+}
 
 .quiz-option {
-  margin: 5px 0;
-  padding: 8px;
+  padding: 10px 20px;
+  background-color: #444;
+  border-radius: 5px;
+  cursor: pointer;
+  transition: background-color 0.3s ease;
 }
 
-.quiz-option label {
-  display: flex;
-  align-items: center;
-  padding-left: 20px;
+.quiz-option:hover {
+  background-color: #555;
 }
-
 
 .selected-option {
-  background-color: #ff3366;
+  background-color: #d012a0;
+}
+.selected-option:hover {
+  background-color: #d012a0;
 }
 
 .correct-option {
-  background-color: #28a745;
+  background-color: #4caf50;
 }
 
 .incorrect-option {
-  background-color: #dc3545;
+  background-color: #f44336;
 }
 
-.submit-btn, .done-btn {
-  background-color: #ff3366;
+.feedback {
+  margin-top: 15px;
+  font-size: 1.2em;
 }
 
-.submit-btn:hover, .done-btn:hover {
-  background-color: #e02f5f;
+.correct {
+  color: #4caf50;
+}
+
+.incorrect {
+  color: #f44336;
+}
+
+.subtitle-btn {
+  background-color: transparent;
+  color: white;
+  border: none;
+  padding: 10px;
+  cursor: pointer;
+  border-radius: 50%;
+  transition: background-color 0.3s ease;
+}
+
+.subtitle-btn:hover {
+  background-color: rgba(255, 255, 255, 0.2);
 }
 </style>

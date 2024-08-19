@@ -20,5 +20,4 @@ Route::get('/', function () {
 });
 
 
-Route::get('/', [QuizController::class, 'index']);
-Route::post('/save-answer', [QuizController::class, 'saveAnswer']);
+
